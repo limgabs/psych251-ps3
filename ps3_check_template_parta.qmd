@@ -1,0 +1,147 @@
+---
+title: "Reproducibility check: People Overestimate Their Willingness to Reject Potential Romantic Partners by Overlooking Their Concern for Other People: [Joel et al. (2014)]"
+author: "[Gabrielle Halim]"
+date: Saturday, November 21, 2026
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Article
+
+- Citation and DOI: Joel, S., Teper, R., & MacDonald, G. (2014). People overestimate their willingness to reject potential romantic partners by overlooking their concern for other people. Psychological science, 25(12), 2233–2240. https://doi.org/10.1177/0956797614552828
+- Data/materials repository URL: https://github.com/psych251/problem_sets/tree/fd000d93dfac3611b323e9a0e523d9260f4a9e58/ps3/Group%20A/Choice%201
+- Part A (known case) or Part B (a classmate's project paper): Part A (known case)
+- Part B only: the classmate's project repo, and which target outcome is its key effect: N/A
+
+## Target outcomes
+
+Written **before** opening the data. Quote each from the paper. In Part B, one of these must
+be the project's key effect.
+
+| # | Target outcome (quoted) | Paper value(s) |
+|---|---|---|
+| 1 | "We next tested our primary hypothesis that participants would be more reluctant to reject the unattractive date when they believed the situation to be real rather than hypothetical. Only 10 of the 61 participants in the hypothetical condition chose to exchange contact information with the unattractive potential date (16%). In contrast, 26 of the 71 participants in the real condition chose to exchange contact information (37%)." (p. 2235) | Hypothetical condition: 10/61 = 16%. Real condition: 26/71 = 37%. |
+| 2 | "A chi-square test of independence indicated that participants were significantly less likely to reject the unattractive potential date in the real condition compared with the hypothetical condition." (p. 2235) | χ2(1, N = 132) = 6.77, p = .009. |
+
+## Materials inventory
+
+| Item | Available? | Notes |
+|---|---|---|
+| Raw data | Partly | `Empathy Gap Study 1 data.sav` includes item-level responses (attachment, empathy, motives items), but only for the 132 analyzed participants; the 150 originally recruited are not included, so exclusions cannot be checked. |
+| Processed data | Yes | Same SPSS file. Variables after `REQUIRED_VARIABLES_START_BELOW` are the analysis variables: `condition` (0 = hypothetical, 1 = real), `exchangeinfo` (1 = yes, 2 = no), `otherfocused_motives`, `selffocused_motives`. |
+| Codebook / variable descriptions | Partly | No separate codebook; SPSS variable and value labels describe the key analysis variables. Most item-level variables are unlabeled. |
+| Analysis code | No | No SPSS syntax or scripts provided. |
+| Preregistration | No | None mentioned in the article. |
+
+## Reproduction
+
+The agent's work, under your direction. Keep all code visible. Scope (from `reproducibilityReport.Rmd`): Study 1 descriptives and chi-square only (target 1).
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(haven)
+library(knitr)
+```
+
+```{r}
+#| label: load
+d <- read_sav("Empathy Gap Study 1 data.sav")
+dim(d)  # paper: N = 132 analyzed
+```
+
+```{r}
+#| label: preprocess
+d_tidy <- d |>
+  select(ID, condition, exchangeinfo) |>
+  mutate(
+    condition = as_factor(condition),       # hypothetical / real
+    exchangeinfo = as_factor(exchangeinfo)  # yes / no
+  )
+
+count(d_tidy, condition)  # paper: 61 hypothetical, 71 real
+```
+
+### Descriptive statistics
+
+> Only 10 of the 61 participants in the hypothetical condition chose to exchange contact information with the unattractive potential date (16%). In contrast, 26 of the 71 participants in the real condition chose to exchange contact information (37%).
+
+```{r}
+#| label: descriptives
+d_tidy |>
+  group_by(condition) |>
+  summarise(
+    n = n(),
+    n_exchanged = sum(exchangeinfo == "yes"),
+    pct_exchanged = round(100 * mean(exchangeinfo == "yes"))
+  ) |>
+  kable()
+```
+
+### Inferential statistics
+
+> A chi-square test of independence indicated that participants were significantly less likely to reject the unattractive potential date in the real condition compared with the hypothetical condition, χ2(1, N = 132) = 6.77, p = .009.
+
+```{r}
+#| label: analysis
+tab <- table(d_tidy$condition, d_tidy$exchangeinfo)
+tab
+
+chi <- chisq.test(tab, correct = FALSE)  # no continuity correction, per report hint
+chi
+
+cat(sprintf("chi2(%d, N = %d) = %.2f, p = %.3f",
+            chi$parameter, sum(tab), chi$statistic, chi$p.value))
+```
+
+For comparison, with the Yates continuity correction (R's default) the statistic would be different:
+
+```{r}
+#| label: analysis-yates
+chisq.test(tab, correct = TRUE)
+```
+
+**Agent's summary:** Study 1 target reproduced. Counts (10/61 = 16% vs. 26/71 = 37%) and χ²(1, N = 132) = 6.77, p = .009 match the paper exactly when the test is run without continuity correction. With Yates correction it would be χ² = 5.79, p = .016, so the paper evidently used the uncorrected Pearson test. Targets 2–4 (MANOVA, univariate ANOVAs, mediation) were outside the Part A scope set by `reproducibilityReport.Rmd` and were not attempted.
+
+## Checker's verdict
+
+Filled in by you, not the agent.
+
+| # | Paper value | Reproduced value | Verdict (exact / minor / major / not reproducible) | Reason for discrepancy |
+|---|---|---|---|---|
+| 1 | Hypothetical condition: 10/61 = 16%. Real condition: 26/71 = 37% | Hypothetical condition: 10/61 = 16%. Real condition: 26/71 = 37% | Exact | N/A |
+| 2 | χ2(1, N = 132) = 6.77, p = .009. | χ²(1, N = 132) = 6.77, p = .009. | Exact| N/A |
+
+Agent's own claim about success, and whether it was right: The agent's claim about success was accurate and even provided insight on whether the authors used continuity correction.
+
+## Time
+
+- Your time (hours): 1
+- Agent wall-clock time (hours): 0.03 
+- Stopped at the 4-hour cap? What remained: N/A
+
+## Assessment
+
+Is the primary result analytically reproducible? What would have made this take 30 minutes?
+
+The primary result was analytically reproducible. I was initially confused on whether I should reproduce all the results (study 1 and 2) so I started listing all the tests and outcomes manually. 
+
+## AI documentation
+
+- Agent and interface (e.g., Claude Code, Codex CLI, Cursor): Claude Code
+- Model and version, if the tool reports it: Opus 5.5
+- Context you gave it (files, instructions, any context file): Files: ps3_reproducibility.qmd, ps3_check_template.qmd, article.pdf, Empathy Gap Study 1 data.sav, Empathy_Gap_Study_2_data.sav, and reproducibilityReport.Rmd. See instructions pasted in transcript section below. 
+- Number of times you intervened, and the most important intervention: I intervened twice, to supply reproducibilityReport.Rmd, and to tell Claude to fix the data path.
+- Transcript: [transcripts/partA_transcript.jsonl](https://github.com/limgabs/psych251-ps3/blob/main/transcripts/partA_transcript.jsonl) (exported from the Claude Code desktop app; email address and home-folder paths removed). My prompts, in order:
+
+  Read ps3_reproducibility and ps3_check_template
+  The article for part a is called article.pdf
+  i just entered the reproducibilityreport.rmd. just to confirm, the assignment is not to replicate everything or am i misinterpreting this
+  adjust the path
+  ok go ahead
+  whats your agent wall clock time
