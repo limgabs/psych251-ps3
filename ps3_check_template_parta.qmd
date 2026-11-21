@@ -13,8 +13,8 @@ execute:
 
 ## Article
 
-- Citation and DOI: Joel, S., Teper, R., & MacDonald, G. (2014). People overestimate their willingness to reject potential romantic partners by overlooking their concern for other people. Psychological science, 25(12), 2233–2240. https://doi.org/10.1177/0956797614552828
-- Data/materials repository URL: https://github.com/psych251/problem_sets/tree/fd000d93dfac3611b323e9a0e523d9260f4a9e58/ps3/Group%20A/Choice%201
+- Citation and DOI: Joel, S., Teper, R., & MacDonald, G. (2014). People overestimate their willingness to reject potential romantic partners by overlooking their concern for other people. Psychological science, 25(12), 2233–2240. (https://doi.org/10.1177/0956797614552828)
+- Data/materials repository URL: (https://github.com/psych251/problem_sets/tree/fd000d93dfac3611b323e9a0e523d9260f4a9e58/ps3/Group%20A/Choice%201)
 - Part A (known case) or Part B (a classmate's project paper): Part A (known case)
 - Part B only: the classmate's project repo, and which target outcome is its key effect: N/A
 
@@ -127,9 +127,7 @@ Agent's own claim about success, and whether it was right: The agent's claim abo
 
 ## Assessment
 
-Is the primary result analytically reproducible? What would have made this take 30 minutes?
-
-The primary result was analytically reproducible. I was initially confused on whether I should reproduce all the results (study 1 and 2) so I started listing all the tests and outcomes manually. 
+The primary result was analytically reproducible. This could have taken 30 minutes if I read the key analysis test instructions more carefully.  I was initially confused on whether I should reproduce all the results (study 1 and 2) so I started listing all the tests and outcomes manually. 
 
 ## AI documentation
 
@@ -137,11 +135,4 @@ The primary result was analytically reproducible. I was initially confused on wh
 - Model and version, if the tool reports it: Opus 5.5
 - Context you gave it (files, instructions, any context file): Files: ps3_reproducibility.qmd, ps3_check_template.qmd, article.pdf, Empathy Gap Study 1 data.sav, Empathy_Gap_Study_2_data.sav, and reproducibilityReport.Rmd. See instructions pasted in transcript section below. 
 - Number of times you intervened, and the most important intervention: I intervened twice, to supply reproducibilityReport.Rmd, and to tell Claude to fix the data path.
-- Transcript: [transcripts/partA_transcript.jsonl](https://github.com/limgabs/psych251-ps3/blob/main/transcripts/partA_transcript.jsonl) (exported from the Claude Code desktop app; email address and home-folder paths removed). My prompts, in order:
-
-  Read ps3_reproducibility and ps3_check_template
-  The article for part a is called article.pdf
-  i just entered the reproducibilityreport.rmd. just to confirm, the assignment is not to replicate everything or am i misinterpreting this
-  adjust the path
-  ok go ahead
-  whats your agent wall clock time
+- Transcript: [transcripts/partA_transcript.jsonl](https://github.com/limgabs/psych251-ps3/blob/main/transcripts/partA_transcript.jsonl) (exported from the Claude Code desktop app; email address and home-folder paths removed). 
