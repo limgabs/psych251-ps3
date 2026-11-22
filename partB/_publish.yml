@@ -1,0 +1,4 @@
+- source: ps3_check_template_partb.qmd
+  posit-connect-cloud:
+    - id: 01a20167-60ae-9eb7-0c7e-264fd3f60ac8
+      url: https://connect.posit.cloud/limgabs/content/01a20167-60ae-9eb7-0c7e-264fd3f60ac8
