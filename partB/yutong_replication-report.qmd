@@ -1,0 +1,1172 @@
+---
+title: "Replication of the AI Label Effect of Yin et al. (2024, *PNAS*)"
+author: "Yutong Zhang (yutongz7@stanford.edu)"
+date: today
+date-format: long
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    embed-resources: true
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+execute:
+  warning: false
+  message: true
+---
+
+<!--
+PSYCH 251 replication report template.
+
+Every project uses this structure so that reports are comparable across the class. They
+become public supplementary material, so write for a reader who has the original paper but
+not your repository.
+
+The project has two phases, and so does this report:
+  Phase 1, the replication. Introduction and Methods are written, critiqued and preregistered
+           BEFORE data collection; the Methods addendum, Results and Discussion after it.
+  Phase 2, the extension. Proposed after Phase 1 (Rationale, Changes from Phase 1, Power and
+           sample, Analysis plan), then run, with its own Results and Discussion.
+The AI use statement and the Key statistics table sit at the top and are kept current
+throughout. Follow the Extension guidelines page on Canvas for Phase 2.
+
+Render this file at every stage. Before a phase has data, its results say so and skip
+themselves; during Pilot A the Phase 1 results run on pilot data, which is the point of Pilot A.
+
+Grey "Guidance" boxes are instructions. Delete each one once you have written that section.
+The code is wired to the template's demo experiment (the framing problem). Replace the demo
+specifics with your study's as you go: the experiment ids, the original study's numbers, the
+exclusion rule, and the key comparison.
+-->
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(jsonlite)
+
+# Must match the --id you passed to qualtrics/export-data.js (data/raw/<id>/responses.csv).
+# Phase 2 runs under its own id, so its data never mix with Phase 1's.
+experiment_id        <- "yin2024-label-final"
+experiment_id_phase2 <- "yin2024-label-phase2"
+```
+
+```{r}
+#| label: original-study
+#| include: false
+# The original study's numbers, entered once and used by the power analysis, the Key
+# statistics table, and the side-by-side figures.
+#
+# This replication shows only AI-generated responses, so the matching original comparison is the
+# label effect WITHIN the AI-response conditions (Yin, Jia & Wakslak, 2024, Table 2, p. 5):
+#   AI response, AI label      M = 5.41, SD = 1.33
+#   AI response, human label   M = 6.12, SD = 0.97
+# (NOT Table 1's label means, 5.13 vs 5.81, which pool AI and human responses.)
+# Cell sizes are not in the paper. They come from the authors' public data on OSF
+# (https://osf.io/8wnmr, "Being Heard by AI OSF.csv"); some published descriptives differ in the last digit:
+# AI response / AI label n = 124, AI response / human label n = 110.
+# The paper's own test of this contrast (SI Table 2): t(451) = 4.00, p < .001, d = 0.52, 95% CI
+# [0.31, 0.74], using the error variance pooled over all four cells.
+original <- tibble(
+  condition = c("ai", "human"),
+  n         = c(124, 110),
+  mean      = c(5.41, 6.12),
+  sd        = c(1.33, 0.97)
+)
+
+# All four outcomes in the same cells (AI responses; AI label n = 124, human label n = 110).
+# Means and SDs are the paper's Table 2 (p. 5); the cell sizes are from the OSF data. (The raw OSF
+# data give accuracy M = 6.054545, SD = 1.021210 in the human-label cell, and
+# M = 5.810484, SD = 1.185263 in the AI-label cell; Table 2 prints 6.06 / 1.02 and 5.81 / 1.18.)
+# The measure names match the columns of the exported ratings rows.
+original_measures <- tribble(
+  ~measure,                ~condition, ~n,  ~mean, ~sd,
+  "feeling_heard",         "ai",       124, 5.41,  1.33,
+  "feeling_heard",         "human",    110, 6.12,  0.97,
+  "response_accuracy",     "ai",       124, 5.81,  1.18,
+  "response_accuracy",     "human",    110, 6.06,  1.02,
+  "responder_understood",  "ai",       124, 5.43,  1.47,
+  "responder_understood",  "human",    110, 6.19,  0.92,
+  "connection",            "ai",       124, 4.28,  1.80,
+  "connection",            "human",    110, 5.19,  1.18
+)
+```
+
+::: {.callout-note appearance="simple" icon=false}
+## Project links
+
+- **Original paper:** Yin, Y., Jia, N., & Wakslak, C. J. (2024). AI can help people feel heard, but an AI label diminishes this impact. *Proceedings of the National Academy of Sciences, 121*(14), e2319112121. <https://doi.org/10.1073/pnas.2319112121>
+- **Preregistration:** [OSF registration](https://osf.io/wgecp) *(registered 2026-11-05, before final data collection)*
+- **Live experiment:** <https://stanforduniversity.qualtrics.com/jfe5/preview/previewId/2e58799d-82a5-48c9-99ec-d3e064b40ecd/SV_d0Cu80obbYNC9Vk?Q_CHL=preview&Q_SurveyVersionID=current> (take the study exactly as participants did)
+- **Repository:** <https://github.com/psych251/yin2024> (experiment code, data, and this report)
+:::
+
+# AI use statement
+
+| Tool and model | What it was used for | How you checked the output |
+|---|---|---|
+| Claude Code (claude-sonnet-5-5) | Review and understand the existing codebase and project setup, implement the experiment, and review and validate the study design; update the analysis code; Review and check my study design; Help conduct the robustness check; | Test the experiment myself and with pilot participants; compare the study design with the original paper; check the analysis results;
+
+I wrote all of the text in this report myself. AI tools were not used to write, rewrite or
+paraphrase it, and were not used to generate, alter, or impute any participant data. I take full
+responsibility for the content of this report, including any errors introduced by AI tools.
+
+# Key statistics
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+<!--  -->
+<!-- One row per study for the key comparison: the original, your Phase 1 replication, and your -->
+<!-- Phase 2 extension. The table fills itself in from the data as each phase is exported, using the -->
+<!-- analysis code below (open "Show the analysis code"), which is shared by both phases so they are -->
+<!-- analysed identically. Edit that code once, here, to match your design and preregistered -->
+<!-- exclusion rule. On the scientific-extension track, the Phase 2 row reports the new comparison: -->
+<!-- adapt its code and say so in the caption. -->
+<!-- ::: -->
+
+```{r}
+#| label: analysis-functions
+#| code-summary: "Show the analysis code (shared by Phase 1 and Phase 2)"
+# Load one phase's exported data and apply the exclusion rules of the analysis plan. Returns NULL if
+# that phase has not been exported yet, which is how every section below knows to skip itself.
+# The data come from Qualtrics (qualtrics/export-data.js): one row per response, numeric answers only.
+# Qualtrics preview and test responses are already dropped by the export script.
+read_phase <- function(id) {
+  path <- file.path("..", "data", "raw", id, "responses.csv")
+  if (!file.exists(path)) return(NULL)
+  d <- read_csv(path, show_col_types = FALSE)
+
+  heard_items <- c("heard_understood", "heard_validated", "heard_affirmed", "heard_seen",
+                   "heard_accepted", "heard_cared_for")
+  acc_items   <- c("acc_captures", "acc_summarizes")
+  und_items   <- c("und_knew", "und_understood")
+  conn_items  <- c("conn_close", "conn_connected", "conn_trust")
+  # A participant who stopped before a screen has no answers, so make sure every column exists.
+  for (col in c("Finished", "consent", "label", "desc_words", "reply_n_words", "tech_issues",
+                heard_items, acc_items, und_items, conn_items)) {
+    if (!col %in% names(d)) d[[col]] <- NA
+  }
+  # A composite is the mean of its items, and missing unless every item was answered.
+  scale_mean <- function(df, cols) {
+    m <- as.matrix(df[, cols])
+    ifelse(rowSums(is.na(m)) == 0, rowMeans(m), NA_real_)
+  }
+  d <- d |>
+    mutate(completed = coalesce(as.numeric(Finished) == 1, FALSE),
+           consented = coalesce(as.numeric(consent) == 1, FALSE),
+           condition = label,
+           feeling_heard        = scale_mean(d, heard_items),
+           response_accuracy    = scale_mean(d, acc_items),
+           responder_understood = scale_mean(d, und_items),
+           connection           = scale_mean(d, conn_items))
+
+  # Exclusion rules (the analysis plan): a participant is analysed only if they finished the survey,
+  # gave valid consent, wrote a description of at least 30 words (the interface already refuses shorter
+  # ones), and answered all six feeling-heard items (so the mean can be computed). Each participant
+  # is counted under the FIRST rule they fail, in the order below.
+  min_words <- 30
+  status <- d |>
+    mutate(reason = case_when(
+      !completed                                         ~ "Did not finish the survey",
+      !consented                                         ~ "No valid consent",
+      coalesce(as.numeric(desc_words), 0) < min_words    ~ "Description under 30 words",
+      is.na(feeling_heard)                               ~ "Missing one of the six feeling-heard items",
+      TRUE                                               ~ "Analysed"))
+  keep <- status |> filter(reason == "Analysed")
+  scores <- keep |> select(participant_id, condition, feeling_heard, response_accuracy,
+                           responder_understood, connection)
+
+  list(participants = d, complete = filter(d, completed), keep = keep, scores = scores, status = status,
+       n_test = 0L,  # preview / test responses are removed by qualtrics/export-data.js before this file is written
+       n_no_score = sum(status$reason == "Missing one of the six feeling-heard items"))
+}
+
+# One row per label condition for the analysed participants: n, mean and SD of a measure.
+label_summary <- function(d, var = "feeling_heard") {
+  d$scores |>
+    group_by(condition) |>
+    summarise(n = sum(!is.na(.data[[var]])), mean = mean(.data[[var]], na.rm = TRUE),
+              sd = sd(.data[[var]], na.rm = TRUE), .groups = "drop")
+}
+
+# The key statistic: difference in mean Feeling Heard (AI label minus human label) with a 95%
+# CI from Welch's t test, plus Cohen's d (pooled SD). Works from the per-condition summary,
+# so the original (summary statistics only) and the replication go through the same code.
+# NULL until both labels have at least two analysed participants (and some variation).
+diff_ci <- function(s) {
+  ai <- s[s$condition == "ai", ]
+  hu <- s[s$condition == "human", ]
+  if (nrow(ai) == 0 || nrow(hu) == 0 || ai$n < 2 || hu$n < 2 || anyNA(c(ai$sd, hu$sd))) return(NULL)
+  # No variation in either group (for example everyone gave the same rating): the test is undefined.
+  if (ai$sd == 0 && hu$sd == 0) return(NULL)
+  v_ai <- ai$sd^2 / ai$n
+  v_hu <- hu$sd^2 / hu$n
+  se   <- sqrt(v_ai + v_hu)
+  df   <- (v_ai + v_hu)^2 / (v_ai^2 / (ai$n - 1) + v_hu^2 / (hu$n - 1))
+  est  <- ai$mean - hu$mean
+  sd_p <- sqrt(((ai$n - 1) * ai$sd^2 + (hu$n - 1) * hu$sd^2) / (ai$n + hu$n - 2))
+  tibble(N = ai$n + hu$n, estimate = est,
+         ci_low = est - qt(.975, df) * se, ci_high = est + qt(.975, df) * se,
+         statistic = est / se, df = df, p = 2 * pt(-abs(est / se), df), d = est / sd_p,
+         # Approximate 95% CI for d (large-sample standard error).
+         d_low  = est / sd_p - 1.96 * sqrt((ai$n + hu$n) / (ai$n * hu$n) + (est / sd_p)^2 / (2 * (ai$n + hu$n))),
+         d_high = est / sd_p + 1.96 * sqrt((ai$n + hu$n) / (ai$n * hu$n) + (est / sd_p)^2 / (2 * (ai$n + hu$n))))
+}
+
+# Side-by-side figure: any number of studies on the same axes, in the order given. Each
+# argument is a per-condition summary (condition, n, mean, sd).
+comparison_plot <- function(...) {
+  studies <- list(...)
+  studies <- studies[!map_lgl(studies, ~ is.null(.x) || nrow(.x) == 0)]
+  df <- imap_dfr(studies, ~ mutate(.x, Study = .y)) |>
+    mutate(half = qt(.975, n - 1) * sd / sqrt(n),
+           Study = factor(Study, levels = names(studies)),
+           label = sprintf("n = %d", n),
+           condition = factor(condition, levels = c("ai", "human"), labels = c("AI label", "Human label")))
+  fills <- setNames(c("grey55", "#1E6E76", "#B8792A")[seq_along(studies)], names(studies))
+  dodge <- position_dodge(width = 0.8)
+  ggplot(df, aes(x = condition, y = mean, fill = Study)) +
+    geom_col(position = dodge, width = 0.75) +
+    geom_errorbar(aes(ymin = mean - half, ymax = mean + half), position = dodge, width = 0.2) +
+    geom_text(aes(y = 1.1, label = label), position = dodge, vjust = 0, size = 3, colour = "white") +
+    coord_cartesian(ylim = c(1, 7)) +
+    scale_y_continuous(breaks = 1:7) +
+    scale_fill_manual(values = fills) +
+    labs(x = "Label", y = "Feeling Heard (1-7)", fill = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "top")
+}
+
+# The four outcomes of the original, in its order.
+measure_labels <- c(feeling_heard = "Feeling heard", response_accuracy = "Response accuracy",
+                    responder_understood = "Responder understood me", connection = "Connection to responder")
+
+# n, mean and SD by label for each of the four outcomes (the replication's analysed participants).
+measure_summaries <- function(d) {
+  map_dfr(names(measure_labels), ~ label_summary(d, .x) |> mutate(measure = .x))
+}
+# The label effect (AI minus human label) with its 95% CI for each outcome. Same code for the
+# original (original_measures) and the replication; outcomes with fewer than two per label are dropped.
+measure_effects <- function(summ) {
+  map_dfr(unique(summ$measure), function(m) {
+    r <- diff_ci(summ[summ$measure == m, ])
+    if (is.null(r)) NULL else mutate(r, measure = m)
+  })
+}
+# Label effects for the four outcomes, studies side by side, with 95% CIs.
+effects_plot <- function(...) {
+  studies <- list(...)
+  studies <- studies[!map_lgl(studies, ~ is.null(.x) || nrow(.x) == 0)]
+  df <- imap_dfr(studies, ~ mutate(.x, Study = .y)) |>
+    mutate(measure = factor(measure_labels[measure], levels = measure_labels),
+           Study = factor(Study, levels = names(studies)))
+  ggplot(df, aes(x = measure, y = estimate, colour = Study)) +
+    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+    geom_pointrange(aes(ymin = ci_low, ymax = ci_high), position = position_dodge(width = 0.5)) +
+    scale_colour_manual(values = c("grey40", "#1E6E76", "#B8792A")[seq_along(studies)]) +
+    labs(x = NULL, y = "Difference in mean rating (AI label \u2212 human label)", colour = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "top", axis.text.x = element_text(angle = 12, hjust = 1))
+}
+
+phase1 <- read_phase(experiment_id)
+phase2 <- read_phase(experiment_id_phase2)
+have_data   <- !is.null(phase1)
+have_phase2 <- !is.null(phase2)
+```
+
+```{r}
+#| label: key-stats
+#| echo: false
+fmt_row <- function(study, r) {
+  if (is.null(r)) {
+    return(tibble(Study = study, N = "", `Effect (AI - human label)` = "not yet collected",
+                  `95% CI` = "", `t(df)` = "", d = "", p = ""))
+  }
+  tibble(Study = study, N = as.character(r$N),
+         `Effect (AI - human label)` = sprintf("%.2f points", r$estimate),
+         `95% CI` = sprintf("[%.2f, %.2f]", r$ci_low, r$ci_high),
+         `t(df)` = sprintf("%.2f (%.0f)", r$statistic, r$df),
+         d = sprintf("%.2f", r$d),
+         p = format.pval(r$p, digits = 2, eps = 0.001))
+}
+bind_rows(
+  fmt_row("Original", diff_ci(original)),
+  fmt_row("Phase 1: replication", if (have_data) diff_ci(label_summary(phase1))),
+  fmt_row("Phase 2: extension", if (have_phase2) diff_ci(label_summary(phase2)))
+) |>
+  knitr::kable(align = "lrllllr",
+               caption = "Key comparison: Feeling Heard (1-7), AI label minus human label, Welch t test.")
+```
+
+# Phase 1: Replication
+
+## Introduction
+
+In this project, I replicated the label effect examined in "AI can help people feel heard, but an AI label diminishes this impact" by Yin et al. (2024). In the original paper, the researchers found that 1) AI-generated responses made people feel more heard than human-generated responses; 2) however, people felt less heard when they believed that a response came from AI rather than from a human. In this project, I would focus on replicating the second finding to study the AI label effect.
+
+This study closely fits my research interests because my research mainly focuses on how people interact with AI systems, especially in social and relational contexts. My recent work has focused on the social uses of AI chatbots, and "feeling heard" is closely related to how people use AI systems socially. I am especially interested in the label effect because recently people are increasingly integrating AI systems into their daily lives, at the same time, there is also growing debate about how people perceive the warm and supportive tone of these systems. For example, recent work has raised concerns about behaviors such as sycophancy. This makes me interested in whether simply knowing that a response comes from AI could be a significant factor shaping people's perceptions.
+
+The original study used a 2 (response source: human vs. AI) × 2 (label: human vs. AI) between-subjects design. Participants first described a complex situation they were dealing with. Participants then received responses written either by other humans or by AI (Bing chat with OpenAI GPT-4 model), which were independently labeled as human-generated or AI-generated. Considering the limited budget and the potential risk of participant attrition in a multi-session design, I simplified the replication to a two-condition between-subjects experiment, and I would only focus on the part of the second research question in the original paper, the label effect specifically for AI-generated responses. All participants received AI-generated responses for their shared complex situation. However, the response would be randomly labeled as AI-generated or human-generated. In the current study, the entire experiment was conducted in a single session, allowing participants to describe their situation, receive a response, and complete the self-report survey, following the same sequence of steps as the original study.
+
+I preregistered a two-sided Welch's t-test comparing "feeling heard" scores between the AI-label and human-label conditions as the key statistical test. Consistent with the findings of the original paper, I hypothesized that participants in the AI-label condition would report feeling less heard than those in the human-label condition. 
+
+## Methods
+
+### Power analysis
+
+In the original paper, the authors reported Cohen's $d = 0.52$ for the labeling effect on feeling heard among participants receiving AI-generated responses. I calculated the sample sizes to achieve 80%, 90%, and 95% statistical power to detect the effect size reported in the original paper, as well as the sample size required using the 2.5× original sample size approach (Simonsohn, 2015; Experimentology §10.4). Given the course's budget constraints, I targeted a final sample of 146 participants (73 per condition) for analysis, providing approximately 88% power to detect the original effect size.
+
+```{r}
+#| label: power
+# Effect to detect: Cohen's d reported by the original paper for the AI-response comparison
+# (SI Table 2, Feeling Heard, AI response human label - AI response AI label: d = 0.52, 95% CI [0.31, 0.74]).
+original_d <- 0.52
+
+power_rows <- map_dfr(c(0.80, 0.90, 0.95), function(pw) {
+  n <- power.t.test(delta = original_d, sd = 1,
+                    power = pw, sig.level = 0.05)$n
+  tibble(power = scales::percent(pw), n_per_group = ceiling(n), n_total = 2 * ceiling(n))
+})
+
+two_and_half <- ceiling(2.5 * original$n)
+power_rows <- power_rows |>
+  mutate(across(everything(), as.character)) |>
+  bind_rows(tibble(power = "2.5 x original sample (Simonsohn, 2015)",
+                   n_per_group = paste(two_and_half, collapse = " / "),
+                   n_total = as.character(sum(two_and_half))))
+
+knitr::kable(power_rows, col.names = c("Power", "N per label condition", "N total"),
+             caption = sprintf(
+               "Sample needed to detect the original effect (Feeling Heard among AI-generated responses, AI label vs. human label, Cohen's d = %.2f from SI Table 2), two-sided alpha = .05. The last row is 2.5 times the original cell sizes (AI label / human label).",
+               original_d))
+```
+
+### Planned sample
+
+We targeted 146 participants for the final analysis and planned to recruit through Prolific. Consistent with the original study, we would restrict participants to US residents who reported English as their first language and were at least 18 years old. Data collection would stop once we received 146 valid submissions that all met the inclusion criteria. The study was conducted in a single session, with a median completion time of approximately 7 minutes in the pilot. The compensation was \$1.40 per participant, equivalent to about \$12 per hour based on the pilot median, which meets Prolific's recommended payment.
+
+
+### Materials
+
+First, participants were asked to describe a complex situation they were currently experiencing, following the exact same instructions as in the original paper: "Please take a moment to think about a complex situation that you are grappling with. This might involve a challenging decision or issue in either your personal or professional life, characterized by numerous interwoven factors. You might be dealing with an interpersonal conflict involving colleagues, family members, or friends, and are uncertain about the best course of action. You might be wrestling with a profound question or thought."
+
+Since my replication focused on the labeling effect among AI-generated responses, all responses were generated using a large language model (LLM) through an API call with the following prompt, following the original paper: "A person you otherwise don't know described the following complex situation they have been dealing with. Please respond to what they said in a way that makes them feel understood. Keep your response to 57 words. '[description]'" we set the target response length to 57 words, which is the median of the six batch-level median response lengths reported in the original paper.
+
+The remaining survey questions mainly followed the original study in both wording and order, with minor adjustments to reflect the updated AI systems and survey format. After describing their complex situation, participants rated the extent to which they experienced six emotions (happiness, sadness, fear, anger, surprise, and disgust) on a 7-point scale before being assigned to a label condition. Participants were then randomly assigned to either the AI-label or human-label condition and received instructions describing the supposed identity of their conversation partner. In the AI-label condition, participants were told: "Next, you will have a live chat with an AI chatbot. What you just wrote will be sent to the chatbot, and we will ask the chatbot to respond to what you said." In the human-label condition, participants were told: "Next, you will have a live chat with another participant on Prolific who is taking part in this study right now. What you just wrote will be sent to the participant, and we will ask the participant to respond to what you said." The wording differed only in how the response source was described: "the AI chatbot's response" in the AI-label condition and "another Prolific participant's response" in the human-label condition. Both versions ended with the same statement: "We are interested in your impressions of the response." After receiving the AI-generated response, participants completed the same outcome measures as in the original study, including feeling heard, perceived response accuracy, perceived responder understanding, and feeling of connection to the responder. Participants then answered questions about their emotional state, including their current emotions, loneliness, and questions about the perception and usage toward AI. We replaced references to "Bing Chat" in the original study with the more general term "AI chatbot." Finally, participants completed questions measuring their suspicion about the source of the response, and demographic questions. At the end, we would provide the debriefing of the study and tell everyone that all the messages were generated by an AI system. 
+
+
+
+### Procedure
+
+We adapted the procedure from the original study. However, unlike the original study, which involved three stages and required participants to return to read their responses, our replication was conducted entirely in a single session. Participants first provided informed consent and entered their Prolific ID. They then read the study instructions and were asked to describe a complex situation they were currently experiencing. Unlike the original study, which asked participants to record an audio description, participants typed their descriptions into a text box on the survey page. To get enough information, we required users to describe their situation in at least 30 words. After submitting their descriptions, participants rated the six emotions they experienced in the situation.
+
+After completing the emotion ratings, participants were randomly assigned to either the AI-label or human-label condition using Qualtrics, with approximately equal numbers of participants assigned to each condition. Then, depending on their assigned condition, we told participants that they would have a live chat with either an AI chatbot or another Prolific participant currently taking part in the study. On the following page, participants would chat with an embedded chat interface, which included a message describing the complex situation the participants experienced. Each participant's description was sent to the same LLM using the same prompt, regardless of the assigned label, and one personalized response was generated through an API call when the chat page loaded. The response appeared after a 20–25-second wait in both conditions to make the human-labeled response appear more realistic.
+
+After reading the response, participants completed the outcome measures, including feeling heard, perceived response accuracy, perceived responder understanding, and connection to the responder. They then answered questions about their current loneliness and 19 emotions, followed by trait loneliness, mind perception of AI, and familiarity with, use of, and attitudes toward AI chatbots. Next, participants completed a question measuring their suspicion about the response's source, demographic questions, instruction clarity, and optional comments. Finally, participants received a debrief explaining that all responses were AI-generated regardless of the assigned label.
+
+The entire study was completed in a single session. In the pilot, the median completion time was approximately 7 minutes.
+
+
+### Analysis plan
+
+First, we will exclude participants who do not complete the survey, do not provide valid consent, or have missing responses to any of the six feeling-heard questions. Following the original study, participants must provide a sufficiently detailed description of their situation. In our replication, we require a minimum of 30 words when participants describe their situation.
+
+Our primary analysis will examine whether labeling an AI-generated response as AI rather than human affects participants' feeling of being heard. Following the original study, we will calculate the mean of the six feeling-heard items for each participant. We will then conduct a two-sided Welch's t-test comparing the AI-label and human-label conditions, using $\alpha = 0.05$. Considering the original study's results, we hypothesize that participants in the AI-label condition will report lower levels of feeling heard than those in the human-label condition. We will report the difference in means, its 95% confidence interval, and Cohen's $d$.
+
+In addition, we will conduct exploratory analyses examining the effect of labeling on the other three outcomes from the original study, including perceived response accuracy, perceived responder understanding, and feeling of connection to the responder. We will compare these outcomes between the two conditions using Welch's t-tests. 
+
+
+### Differences from the original study
+
+There are five main differences. First, we focused on the labeling effect among AI-generated responses. While the original study used a 2 × 2 design manipulating both the response source (AI vs. human) and the response label (AI vs. human), in this project all responses were generated by AI but randomly labeled as either AI-generated or human-written. Participants were randomly assigned to the two label conditions after completing the initial emotion ratings, with approximately equal numbers assigned to each condition.
+
+Second, we simplified the original three-part procedure into a single-session experiment. Instead of returning the following day to receive a response, participants received an AI-generated response in real time through an embedded chat interface. The interface displayed either a human or AI label and the response to participants' situation. Before showing the response, we intentionally had a 20- to 25-second waiting period in both conditions to make the human-labeled interaction appear more realistic. In the human-labeled condition, participants were told that another Prolific participant was taking part in the study at the same time and would write a response to their situation.
+
+Third, we used GPT-6-luna instead of GPT-4 through Bing Chat, since it was no longer publicly available. Responses were generated through live API calls using the Vegapunk server. We followed the original study's response-generation prompt and asked the model to generate the response to about 57 words, which is consistent with the original paper.
+
+Fourth, different from the original study, we asked participants to type their descriptions of complex situations rather than record an audio message. We required participants to provide at least 30 words and disabled pasting to encourage them to describe their own experience.
+
+Fifth, we made several adjustments to the survey wording and measures. Instead of references to "Bing Chat" in the original survey, we used the more general term "AI chatbot." The primary outcome measures, including feeling heard, response accuracy, responder understanding, and connection, all remain consistent with the original study.
+
+
+### Methods addendum (post data collection)
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Leave this section out of the version you preregister. After data collection, report the -->
+<!-- actual sample and any deviation from the plan above. -->
+<!-- ::: -->
+
+#### Actual sample
+
+In Phase 1, I recruited 288 participants through Prolific. I excluded 133 participants whose live chat sessions were interrupted by an API error. The remaining 154 participants completed the study and met the inclusion criteria. The final sample included 79 participants in the AI-label condition and 75 in the human-label condition.
+
+Participants had a mean age of 40.27 years (SD = 13.29). In the final sample, 61.0% identified as women, 38.3% as men, and 0.6% as nonbinary. Participants identified as White (56.5%), Black (35.7%), Hispanic (3.2%), Asian (1.9%), or mixed race (1.3%). Another 1.3% preferred not to report their race or ethnicity. Compared with the full sample in the original paper, the replication sample was younger on average (40.27 vs. 43.82 years) and included higher proportions of women (61.0% vs. 48.6%) and Black participants (35.7% vs. 12.1%).
+
+```{r}
+#| label: no-data-notice
+#| echo: false
+#| results: asis
+if (!have_data) {
+  cat(
+    "::: {.callout-warning icon=false}\n",
+    "## No Phase 1 data yet\n\n",
+    "There are no exported data for `", experiment_id, "` yet, so the sample and results ",
+    "sections are skipped. This is expected before data collection. Export with ",
+    "`node qualtrics/export-data.js --id ", experiment_id, "` and render again. ",
+    "If you have exported, check that `experiment_id` at the top of this file matches ",
+    "the `--id` you exported with.\n",
+    ":::\n", sep = "")
+}
+```
+
+```{r}
+#| label: phase1-data
+#| eval: !expr have_data
+# Loaded and excluded by read_phase(), under Key statistics, so Phase 1 and Phase 2 share one
+# exclusion rule.
+participants  <- phase1$participants
+complete      <- phase1$complete
+keep          <- phase1$keep
+n_no_score   <- phase1$n_no_score
+```
+
+```{r}
+#| label: funnel
+#| eval: !expr have_data
+funnel_levels <- c("Started", "Completed", "Passed exclusion criteria")
+bind_rows(
+  participants |> mutate(step = "Started"),
+  complete     |> mutate(step = "Completed"),
+  keep         |> mutate(step = "Passed exclusion criteria")
+) |>
+  mutate(step = factor(step, levels = funnel_levels)) |>
+  mutate(condition = coalesce(condition, "not assigned")) |>
+  count(step, condition, .drop = FALSE) |>
+  pivot_wider(names_from = condition, values_from = n, values_fill = 0) |>
+  mutate(Total = rowSums(across(-step))) |>
+  rename(Step = step) |>
+  knitr::kable(caption = "Participants at each step, by label condition. Differences between labels in attrition or exclusion are a threat to validity and should be discussed.")
+```
+
+```{r}
+#| label: attrition-steps
+#| eval: !expr have_data
+# Where participants dropped out, step by step (single session, so this replaces a session-to-session
+# return rate). A step counts a participant if they reached it, in the order of the survey.
+participants |>
+  summarise(`Started` = n(),
+            `Consented` = sum(consented),
+            `Wrote a description` = sum(!is.na(desc_words)),
+            `Were assigned a label` = sum(!is.na(condition)),
+            `Reached the reply` = sum(!is.na(reply_n_words)),
+            `Finished` = sum(completed)) |>
+  pivot_longer(everything(), names_to = "Step", values_to = "Participants") |>
+  knitr::kable(caption = "Participants reaching each step of the survey.")
+```
+
+```{r}
+#| label: sample-text
+#| eval: !expr have_data
+#| echo: false
+#| results: asis
+cat(sprintf("Of %d participants who started, %d completed the study and %d met the exclusion criteria.",
+            nrow(participants), nrow(complete), nrow(keep)))
+if (n_no_score > 0) {
+  cat(sprintf(" %d consenting participant(s) had no computable Feeling Heard score and were excluded on that basis.",
+              n_no_score))
+}
+if (nrow(keep) == 0) cat(" No participants remain for analysis yet, so the results below are empty.")
+cat("\n")
+```
+
+```{r}
+#| label: completion-time
+#| eval: !expr have_data
+# How long the survey took (the original reported median completion times of 4.6, 4.5 and 5 minutes for its
+# three parts). Qualtrics records the start-to-finish duration in seconds.
+completers <- participants |> filter(completed)
+if (nrow(completers) > 0 && "Duration (in seconds)" %in% names(completers)) {
+  mins <- as.numeric(completers[["Duration (in seconds)"]]) / 60
+  tibble(`Completers` = length(mins), `Median minutes` = round(median(mins), 1),
+         `25th-75th percentile` = sprintf("%.1f to %.1f", quantile(mins, .25), quantile(mins, .75))) |>
+    knitr::kable(caption = "Time from start to finish of the survey (completers).")
+}
+```
+
+```{r}
+#| label: demographics
+#| eval: !expr have_data
+#| results: asis
+# The categories and counts below are from Yin et al. (2024), Methods, "Participants" (p. 8),
+# for all 455 recipients (AI and human responses together): gender 221 women, 227 men,
+# 6 non-binary, 1 did not report; race/ethnicity 343 White, 55 Black, 26 mixed race, 15 Asian, 11 Hispanic,
+# 3 other, 1 Native American, 1 did not report; mean age 43.82 (SD 13.12).
+paper_gender <- tibble(category = c("Woman", "Man", "Non-binary", "Other", "Prefer not to say"),
+                       paper_n  = c(221, 227, 6, 0, 1))
+paper_race   <- tibble(category = c("White", "Black", "Asian", "Hispanic", "Native American",
+                                    "Mixed race", "Other", "Prefer not to say"),
+                       paper_n  = c(343, 55, 15, 11, 1, 26, 3, 1))
+
+# Qualtrics stores a multiple-choice answer as the number of the choice, in the order the choices were listed
+# (qualtrics/build-survey.js, Demographics block).
+gender_levels <- c("Woman", "Man", "Non-binary", "Other", "Prefer not to say")
+race_levels   <- paper_race$category
+for (col in c("age", "gender", "race")) if (!col %in% names(keep)) keep[[col]] <- NA
+demo <- keep |>
+  transmute(participant_id,
+            age    = ifelse(between(as.numeric(age), 18, 120), as.numeric(age), NA_real_),
+            gender = gender_levels[as.integer(gender)],
+            race   = race_levels[as.integer(race)])
+
+tabulate_category <- function(values, paper) {
+  recoded <- ifelse(is.na(values), "Not answered", values)
+  tibble(category = recoded) |>
+    count(category, name = "this_study") |>
+    full_join(paper, by = "category") |>
+    mutate(across(c(this_study, paper_n), ~ replace_na(.x, 0)),
+           category = factor(category, levels = c(paper$category, "Not answered"))) |>
+    arrange(category)
+}
+
+# Several tables come out of one chunk, and R only auto-prints the last value of a block, so each
+# table is printed explicitly (the chunk uses results: asis).
+show_table <- function(k) { cat(k, sep = "\n"); cat("\n\n") }
+if (nrow(demo) > 0) {
+  demo |>
+    summarise(N = n(), `Mean age` = round(mean(age, na.rm = TRUE), 2),
+              `SD age` = round(sd(age, na.rm = TRUE), 2),
+              `Age not given` = sum(is.na(age)),
+              `Original mean age` = 43.82, `Original SD age` = 13.12) |>
+    knitr::kable(caption = "Age of the analysed sample, with the original's values.") |> show_table()
+  tabulate_category(demo$gender, paper_gender) |>
+    knitr::kable(col.names = c("Gender", "This study", "Original (N = 455)"),
+                 caption = "Gender of the analysed sample and the original's counts.") |> show_table()
+  tabulate_category(demo$race, paper_race) |>
+    knitr::kable(col.names = c("Race / ethnicity", "This study", "Original (N = 455)"),
+                 caption = "Race / ethnicity of the analysed sample and the original's counts.") |> show_table()
+}
+```
+
+#### Deviations from the preregistered plan
+
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Any deviation from the preregistered plan above, or "None". Changes made after seeing data -->
+<!-- belong here even if they seem minor, together with the reason. -->
+<!-- ::: -->
+
+Before data collection, I preregistered a target of 146 participants for the final analysis. During data collection, 133 participants encountered an API error that disrupted the live chat. I paused recruitment, fixed the issue, and resumed recruitment. I excluded the affected participants because they could not complete the intended chat interaction. The final analytic sample included 154 participants, eight more than planned.
+
+## Results
+
+
+### Data preparation
+Before the main data collection, we conducted four pilot sessions, with participants randomly assigned to either the human-labeled condition (n = 3) or the AI-labeled condition (n = 3). 
+
+Following preregistration, the analyses below include data from 154 Phase 1 participants who met the inclusion criteria and did not encounter an API error during the study.
+
+```{r}
+#| label: data-prep-exclusions
+#| eval: !expr have_data
+# How many records each exclusion rule of the analysis plan removed. The rules are applied in
+# read_phase() (under Key statistics); a participant is counted under the first rule they fail.
+st <- phase1$status
+rules <- c("Did not finish the survey", "No valid consent", "Description under 30 words",
+           "Missing one of the six feeling-heard items")
+tibble(
+  Step = c("Testing IDs (Qualtrics preview and test responses are dropped by the export)", rules, "Analysed: AI label", "Analysed: human label"),
+  n = c(as.character(phase1$n_test),
+        map_chr(rules, ~ as.character(sum(st$reason == .x))),
+        as.character(sum(st$reason == "Analysed" & st$condition == "ai", na.rm = TRUE)),
+        as.character(sum(st$reason == "Analysed" & st$condition == "human", na.rm = TRUE)))) |>
+  knitr::kable(caption = "Data preparation: records removed by each exclusion rule, and the analysed N by label.")
+```
+
+### Confirmatory analysis
+
+Following the preregistered plan, I tested whether participants felt less heard when an AI-generated reply was labeled as generated by an AI chatbot or from another human participant. I averaged the six Feeling Heard items to create a score ranging from 1 to 7 for each participant and compared the two label conditions using a two-sided Welch's t-test.
+
+As shown in the results below, on average participants in the AI-label condition reported a mean score of 5.47 (SD = 1.03, n = 79), while participants in the human-label condition reported a mean score of 5.91 (SD = 0.92, n = 75). Participants in the AI-label condition scored 0.44 points lower on average than those in the human-label condition (95% CI [-0.75, -0.13], t(151.39) = -2.79, p = .006, Cohen's d = -0.45).
+
+The difference was in the same direction as in the original paper. Among participants who received AI-generated replies in the original study, the mean Feeling Heard score was 5.41 in the AI-label condition and 6.12 in the human-label condition, a difference of -0.71 points. The estimated difference was smaller in my replication, but its 95% confidence interval included the original estimate. The side-by-side figure below shows the condition means and their 95% confidence intervals for both studies.
+
+```{r}
+#| label: confirmatory
+#| eval: !expr have_data
+scores <- phase1$scores |> filter(!is.na(feeling_heard))
+
+if (all(c("ai", "human") %in% scores$condition) && all(table(scores$condition) >= 2) &&
+    n_distinct(scores$feeling_heard) > 1) {
+  # Welch's t test on the Feeling Heard composite; the first group listed is the AI label.
+  print(t.test(feeling_heard ~ condition, data = scores))
+  label_summary(phase1) |>
+    mutate(across(c(mean, sd), ~ round(.x, 2))) |>
+    knitr::kable(caption = "Feeling Heard (1-7) by label condition, analysed participants.")
+} else {
+  message("Welch t test not run: it needs at least two analysed participants in each label condition, ",
+          "and some variation in Feeling Heard; there are ", nrow(scores), " analysed participant(s) so far.")
+}
+```
+
+```{r}
+#| label: confirmatory-effect
+#| eval: !expr have_data
+# The key test's effect sizes: the difference in means (AI label minus human label) with its 95% CI,
+# and Cohen's d with an approximate 95% CI.
+rep_stats <- diff_ci(label_summary(phase1))
+if (!is.null(rep_stats)) {
+  rep_stats |>
+    transmute(N, `Difference (AI - human label)` = sprintf("%.2f", estimate),
+              `95% CI` = sprintf("[%.2f, %.2f]", ci_low, ci_high),
+              `t(df)` = sprintf("%.2f (%.1f)", statistic, df),
+              p = format.pval(p, digits = 2, eps = 0.001),
+              `d [95% CI]` = sprintf("%.2f [%.2f, %.2f]", d, d_low, d_high)) |>
+    knitr::kable(caption = "The key test: label effect on Feeling Heard (Welch t test), with Cohen's d.")
+} else {
+  message("Effect size table not shown: it needs at least two analysed participants in each label condition.")
+}
+```
+
+### Replication assessment
+
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Judge the replication on effect sizes, not only on whether the key test is significant. Compare -->
+<!-- the replication estimate and its interval with the original: does the interval exclude zero, and -->
+<!-- does it include the original estimate? A significant result much smaller than the original, or -->
+<!-- a non-significant result whose interval still includes the original effect, are both -->
+<!-- informative and should be reported as such (Experimentology §3.2). -->
+<!-- ::: -->
+
+I replicated the AI-label effect reported by the original paper, and the primary statistical test replicated the primary finding. Among participants who received AI-generated replies, those in the AI-label condition felt less heard than those in the human-label condition. The estimated difference was -0.44 points in my replication (Cohen's d = -0.45), compared with -0.71 points in the original study. Although the estimated effect was smaller in my replication, its 95% confidence interval [-0.75, -0.13] excluded zero and included the original estimate.
+
+```{r}
+#| label: comparison
+#| eval: !expr have_data
+orig <- diff_ci(original)
+rep  <- diff_ci(label_summary(phase1))
+
+if (!is.null(rep)) {
+  bind_rows(orig |> mutate(Study = "Original"), rep |> mutate(Study = "Phase 1: replication")) |>
+    transmute(Study, N,
+              `Difference (AI - human label)` = sprintf("%.2f points", estimate),
+              `95% CI` = sprintf("[%.2f, %.2f]", ci_low, ci_high),
+              `d [95% CI]` = sprintf("%.2f [%.2f, %.2f]", d, d_low, d_high),
+              p = format.pval(p, digits = 2, eps = 0.001)) |>
+    knitr::kable(caption = "Effect size: difference in mean Feeling Heard (1-7), AI label minus human label. d uses the pooled SD of the two label groups; the paper's d = 0.52 uses the SD pooled over all four of its conditions.")
+} else {
+  message("Replication effect size not computed yet: need at least two analysed participants in each label condition.")
+}
+```
+
+```{r}
+#| label: comparison-verdict
+#| eval: !expr have_data
+#| echo: false
+#| results: asis
+if (!is.null(rep)) {
+  excludes_zero <- rep$ci_low > 0 | rep$ci_high < 0
+  includes_orig <- orig$estimate >= rep$ci_low & orig$estimate <= rep$ci_high
+  cat(sprintf(
+    "The replication's 95%% interval %s zero and %s the original estimate of %.2f points. ",
+    if (excludes_zero) "excludes" else "includes",
+    if (includes_orig) "includes" else "does not include",
+    orig$estimate))
+  cat(sprintf("The replication estimate of %.2f points %s the original's 95%% interval [%.2f, %.2f]. ",
+              rep$estimate,
+              if (rep$estimate >= orig$ci_low & rep$estimate <= orig$ci_high) "lies inside" else "lies outside",
+              orig$ci_low, orig$ci_high))
+  cat("These facts are the starting point for the summary in the Discussion, not the conclusion.\n")
+}
+```
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance: show the original next to your replication -->
+
+<!-- **Every report should have a figure that puts the original finding and your replication side by -->
+<!-- side.** It is the single most informative thing in a replication report: a reader can see at a -->
+<!-- glance whether the effect came back, and how its size compares. Make it however you can, in -->
+<!-- roughly this order of preference: -->
+
+<!-- 1. **Replot both from numbers.** Enter the original's summary statistics (means or proportions, -->
+<!--    with SDs, SEs or CIs, and Ns) in the original-study chunk at the top of this file, and plot -->
+<!--    them on the same axes as yours. That is what the demo figure below does. -->
+<!-- 2. **Replot the original from its data**, if the authors shared it or it is in an open -->
+<!--    repository, using exactly the same plotting code as for your own data. -->
+<!-- 3. **Show the original figure as an image** next to yours if neither is possible. Save a -->
+<!--    screenshot of it, for example as `writeup/images/original-figure.png`, and lay the two out -->
+<!--    in columns: -->
+
+<!--    ````markdown -->
+<!--    ::: {layout-ncol=2} -->
+<!--    ![Original: Tversky & Kahneman (1981), Figure 1](images/original-figure.png) -->
+
+<!--    ```{{r}} -->
+<!--    # your replication plot here -->
+<!--    ``` -->
+<!--    ::: -->
+<!--    ```` -->
+
+<!-- Whichever you choose, use the same measure, scale, condition order and error-bar meaning for -->
+<!-- both panels, label which is which, and cite the source of the original values or figure in the -->
+<!-- caption. If the original reported no variability, say so rather than leaving it out silently. -->
+<!-- ::: -->
+
+Figure below compares mean Feeling Heard scores in the original study and my Phase 1 replication. Both of them use the same 1-7 scale and show only participants who received AI-generated replies. In both studies, participants felt less heard in the AI-label condition than in the human-label condition. The gap between the two conditions was smaller in my replication.
+
+```{r}
+#| label: fig-comparison
+#| eval: !expr have_data
+#| fig-cap: "Feeling Heard (1-7) by label condition, original study and Phase 1 replication. Error bars are 95% confidence intervals. Original: the AI-response conditions of Yin et al. (2024), Table 2, with cell sizes from the authors' OSF data."
+#| fig-width: 7
+#| fig-height: 4
+comparison_plot(Original = original, `Phase 1: replication` = label_summary(phase1))
+```
+
+### Exploratory analyses
+
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Any follow-up analyses (optional). Label them clearly as exploratory: they were not planned, so -->
+<!-- they generate hypotheses rather than test them. -->
+<!-- ::: -->
+
+
+I further used Welch's t-tests to explore whether the assigned label also affected perceived response accuracy, how well participants thought the responder understood them, and how connected they felt to the responder. Based on my analysis, I found that the AI-label group rated response accuracy 0.46 points lower than the human-label group (95% CI [-0.78, -0.15]) and perceived responder understanding 0.46 points lower (95% CI [-0.83, -0.09]). 
+In addition, participants in the AI-label group felt 0.33 points less connected to the responder on average than those in the human-label group. The 95% confidence interval for the difference [-0.86, 0.20] included zero.
+
+I also explored whether participants doubted the source indicated by their assigned label. In the human-label condition, 68% of participants in that condition rated their suspicion that AI wrote the reply at 5 or higher on a 7-point scale (M = 5.28). In the AI-label condition, 18% rated their suspicion that a human wrote the reply at 5 or higher on a 7-point scale (M = 2.72). The original paper found the same pattern among participants who received AI-generated replies, but the average suspicion in the human-label condition was higher in my replication (M = 5.28) than in the original study (M = 3.93). Considering many participants who were told a human wrote the reply suspected it was written by AI, this may help explain the smaller contrast of the Feeling Heard scores between the two conditions in my replication.
+
+```{r}
+#| label: exploratory-outcomes
+#| eval: !expr have_data
+# Exploratory (the analysis plan): the label effect on the other three outcomes of the original,
+# each with a Welch t test (AI label minus human label), next to the original's cells.
+secondary <- c("response_accuracy", "responder_understood", "connection")
+outcome_rows <- function(summ, study) {
+  map_dfr(secondary, function(m) {
+    s_m <- summ[summ$measure == m, ]
+    ai <- s_m[s_m$condition == "ai", ]; hu <- s_m[s_m$condition == "human", ]
+    r <- diff_ci(s_m)
+    tibble(Outcome = measure_labels[[m]], Study = study,
+           `n (AI / human label)` = sprintf("%d / %d", ai$n, hu$n),
+           `M (SD), AI label` = sprintf("%.2f (%.2f)", ai$mean, ai$sd),
+           `M (SD), human label` = sprintf("%.2f (%.2f)", hu$mean, hu$sd),
+           `Difference [95% CI]` = if (is.null(r)) "not computable" else sprintf("%.2f [%.2f, %.2f]", r$estimate, r$ci_low, r$ci_high),
+           `t(df)` = if (is.null(r)) "" else sprintf("%.2f (%.1f)", r$statistic, r$df),
+           p = if (is.null(r)) "" else format.pval(r$p, digits = 2, eps = 0.001),
+           `d [95% CI]` = if (is.null(r)) "" else sprintf("%.2f [%.2f, %.2f]", r$d, r$d_low, r$d_high))
+  })
+}
+rep_sum <- measure_summaries(phase1)
+bind_rows(outcome_rows(original_measures, "Original"), outcome_rows(rep_sum, "Phase 1: replication")) |>
+  arrange(factor(Outcome, levels = measure_labels[secondary]), Study) |>
+  knitr::kable(caption = "Exploratory: label effect on the other three outcomes (1-7), Welch t tests; original = AI-response conditions (Table 2).")
+```
+
+```{r}
+#| label: fig-effects
+#| eval: !expr have_data
+#| fig-cap: "Exploratory: label effect (AI label minus human label) on the four outcomes, original (AI-response conditions, Table 2) and Phase 1 replication, with 95% confidence intervals. Outcomes with fewer than two analysed participants per label are not shown."
+#| fig-width: 8
+#| fig-height: 4
+effects_plot(Original = measure_effects(original_measures),
+             `Phase 1: replication` = measure_effects(rep_sum))
+```
+
+```{r}
+#| label: manipulation-check
+#| eval: !expr have_data
+# Exploratory: suspicion about the true source of the reply, 1 (not at all) to 7 (very much), by label. In the AI-label
+# group the item asks about suspecting a human wrote it; in the human-label group, about suspecting an AI.
+if (!"suspicion" %in% names(keep)) keep$suspicion <- NA
+keep |>
+  mutate(suspicion = as.numeric(suspicion)) |>
+  group_by(condition) |>
+  summarise(n = sum(!is.na(suspicion)), Mean = round(mean(suspicion, na.rm = TRUE), 2),
+            SD = round(sd(suspicion, na.rm = TRUE), 2),
+            `% rating 5 to 7` = round(100 * mean(suspicion >= 5, na.rm = TRUE), 0), .groups = "drop") |>
+  knitr::kable(caption = "Exploratory: suspicion about the source of the reply, by label (analysed participants).")
+```
+
+```{r}
+#| label: data-quality
+#| eval: !expr have_data
+# Qualtrics records no browser errors, so check the things that can go wrong in this design instead: technical
+# problems the participant reported, pasting into the description box, and how long the reply took to appear.
+for (col in c("tech_issues", "desc_paste_attempts", "wait_ms")) if (!col %in% names(participants)) participants[[col]] <- NA
+participants |>
+  filter(completed) |>
+  summarise(`Finished` = n(),
+            `Reported a technical issue (chat)` = sum(as.numeric(tech_issues) == 2, na.rm = TRUE),
+            `Tried to paste into the description` = sum(as.numeric(desc_paste_attempts) > 0, na.rm = TRUE),
+            `Median wait before the reply (s)` = round(median(as.numeric(wait_ms), na.rm = TRUE) / 1000, 1)) |>
+  knitr::kable(caption = "Data-quality checks (completers).")
+```
+
+## Discussion
+
+### Summary of replication attempt
+
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Open with one paragraph summarizing the result of the key analysis and your assessment of -->
+<!-- whether the original finding replicated, partially replicated, or failed to replicate. Base -->
+<!-- that judgment on the replication assessment above: the size of the effect relative to the -->
+<!-- original, not just the p value. -->
+<!-- ::: -->
+
+In this study, I replicated the primary finding of Yin et al. (2024). Based on the results, we find that when participants received an AI-generated reply, they felt less heard if it was labeled as coming from AI than if it was labeled as coming from a human. The preregistered Welch's t-test estimated a difference of -0.44 points (Cohen's d = -0.45), compared with -0.71 points in the original study. Although my estimate was smaller, its 95% confidence interval [-0.75, -0.13] excluded zero and included the original estimate.
+
+### Commentary
+
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Open-ended commentary, none of it long: (a) what the exploratory analyses suggest; (b) what the -->
+<!-- replication means, for example whether the differences between your study and the original are -->
+<!-- definitely, plausibly, or unlikely to be moderators of the result; and (c) any objections or -->
+<!-- challenges raised by you or the original authors. -->
+<!-- ::: -->
+
+As people use AI in more areas of daily life, including for social support, it matters whether knowing that a reply came from AI changes how they experience it. In this study, I replicated the AI-label effect found in Yin et al. (2024) using a newer model (GPT-6-luna instead of GPT-4). Aligned with the original finding, participants felt less heard when an AI-generated reply was labeled as coming from AI. In the exploratory analyses, they also rated the reply as less accurate and felt less understood by the responder. It can be hard to feel heard if you think the person replying missed what happened or why it mattered to you. If the AI label made the participants feel that the reply missed something important and did not fully understand the situation, that's consistent with and may help explain why they felt less heard.
+
+One possible explanation for the smaller effect in my replication is that participants were less convinced by the human label. Among participants who received an AI-generated reply labeled as human-written, average suspicion that AI wrote it was higher in my study than in the original study (5.28 vs. 3.93 on a 7-point scale). Considering the different setting in my study, participants received a personalized reply within the same chat session. In the original study, they returned the next day to read it. The shorter wait may have made participants more likely to doubt that the response they received was actually written by a human, which could help explain why the difference in Feeling Heard scores between the two groups was smaller in my replication than in the original study. Besides, typing instead of speaking may have changed what participants shared and how personally tailored the replies felt. Also, since I used GPT-6-luna instead of GPT-4, a different model may also have a different language style as well. 
+
+The original paper raised the possibility that asking about suspicion may itself have prompted doubt. That makes it difficult to tell how much doubt participants experienced while reading the reply. A separate challenge in my replication was the API failure, and I excluded 133 submissions because of this technical problem.
+
+# Phase 2: Extension
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance: choosing your extension -->
+
+<!-- Follow the Extension guidelines page on Canvas. In brief: -->
+
+<!-- - **By default the extension is a best-practices modification of your Phase 1 experiment.** If -->
+<!--   your replication did not succeed, it is a **rescue**: address the plausible reasons for the -->
+<!--   failure. If it did succeed, it is an **upgrade**: make the estimate more precise. Typical -->
+<!--   changes are better or more reliable measurement, more trials, a within-participant design -->
+<!--   where that is legitimate, comprehension and manipulation checks, clearer instructions, or a -->
+<!--   larger or better-targeted sample. -->
+<!-- - **If your scientific extension pitch was approved at Milestone 3 and your replication -->
+<!--   succeeded, propose that instead:** the original conditions rerun unchanged, plus the one -->
+<!--   added condition or manipulation, with a power analysis for the new comparison. -->
+<!-- - On either track you may add exploratory measures **at the end** of the study. -->
+<!-- - Every change is listed and tagged by category below; everything else stays identical. -->
+
+<!-- State your track on the line below, and delete the others. -->
+<!-- ::: -->
+
+**Track:** Best-practices upgrade
+<!-- Best-practices upgrade / Best-practices rescue / Scientific extension (approved at Milestone 3) -->
+
+## Rationale
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- One or two paragraphs. For a rescue: what are the plausible reasons Phase 1 did not reproduce the -->
+<!-- original result, and how does each change address one of them? For an upgrade: where is the -->
+<!-- Phase 1 estimate least precise or least trustworthy, and how will the changes improve it? For a -->
+<!-- scientific extension: what question does the added condition answer, and why does it follow from -->
+<!-- the original finding? -->
+<!-- ::: -->
+
+In Phase 1, I replicated the AI-label effect on Feeling Heard, although the estimated effect was smaller than in the original study. Many participants doubted the human label. In the human-label condition, 68% rated their suspicion that AI wrote the reply at 5 or higher on a 7-point scale. If participants in both conditions believed they were interacting with AI, that could help explain why the two groups' Feeling Heard scores were closer together.
+
+In Phase 2, firstly I will revise the prompt in both label conditions so the replies sound more natural and conversational. In addition, I will also extend the chat to three exchanges so participants can clarify or elaborate on what they shared and receive replies that build on earlier messages. I will measure Feeling Heard after the third reply. I expect these changes to make the conversation more engaging and the human label more believable. If fewer participants in the human-label condition suspect that AI wrote the replies, the difference in Feeling Heard between the two groups may be larger than in Phase 1.
+
+## Changes from Phase 1
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Every change from the Phase 1 experiment, one per row, each tagged with a category: Measurement, -->
+<!-- Trials, Design, Checks, Instructions, Sample, Added condition (scientific track only), or -->
+<!-- Exploratory measure (end of study only). If it is not in this table, it does not change: same -->
+<!-- materials, wording, procedure, exclusion rule and analysis. The rows below are examples for the -->
+<!-- demo; replace them with yours. -->
+<!-- ::: -->
+
+| # | Category | Phase 1 | Phase 2 | Why |
+|---|---|---|---|---|
+| 1 | Design | Participants would receive what was generated by the original study's prompt, which asked the model to write a reply that would make the participant feel understood. | Participants will have a conversation in three-turn. I will revise the prompt to ask the model to reply in a more natural, conversational style and build on what each participant has shared. | To make the chat feel more like an everyday conversation and to expect more people in the human-label condition to believe that they are chatting with a real human.
+
+Everything not listed above is identical to Phase 1.
+
+## Power and sample
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Justify the Phase 2 sample, and **state how you expect the estimate and its precision to compare -->
+<!-- with Phase 1**. For an upgrade, plan the sample around the confidence interval you want; for a -->
+<!-- rescue, around the power to detect the original effect, or the smallest effect you would still -->
+<!-- consider a successful replication; for a scientific extension, around the power to detect the new -->
+<!-- comparison. Set `phase2_n_per_group` in the code below; the table uses Phase 1's estimate if you -->
+<!-- have it and the original's otherwise. -->
+<!-- ::: -->
+
+Given the budget constraints, I plan to match the Phase 1 sample of 154 participants (approximately 77 per label condition). Considering Phase 1 replicated the AI-label effect, the goal in Phase 2 is to estimate that effect in a more natural conversation with similar precision. Therefore, I expect the Phase 2 95% confidence interval to span about 0.62 points, which is similar to Phase 1.
+
+I expect participants in the AI-label condition to report feeling less heard after the three-exchange conversation. If the revised chat makes the human label more believable, average suspicion in that condition may move closer to the level reported in the original study (3.93 on a 7-point scale vs. 5.28 in Phase 1). If participants find the human label more believable, the difference between the two groups' Feeling Heard scores may be larger than the -0.44 point gap observed in Phase 1.
+
+```{r}
+#| label: phase2-power
+phase2_n_per_group <- 77   # planned analysed participants per label condition in Phase 2
+
+orig_stats <- diff_ci(original)
+p1_summary <- if (have_data) label_summary(phase1)
+p1_stats   <- if (have_data) diff_ci(p1_summary)
+basis <- if (!is.null(p1_stats)) {
+  list(summary = p1_summary, source = "Phase 1")
+} else {
+  list(summary = original, source = "the original study")
+}
+pooled_sd <- function(s) sqrt(sum((s$n - 1) * s$sd^2) / (sum(s$n) - 2))
+
+# Expected 95% CI half-width on the difference at n per condition.
+half_width <- function(n) qt(.975, 2 * n - 2) * pooled_sd(basis$summary) * sqrt(2 / n)
+power_at <- function(n, delta, sd) {
+  tryCatch(power.t.test(n = n, delta = delta, sd = sd, sig.level = 0.05)$power, error = function(e) NA)
+}
+
+rows <- tibble(
+  Study = c(if (!is.null(p1_stats)) "Phase 1 (actual)", "Phase 2 (planned)"),
+  `N analysed` = c(if (!is.null(p1_stats)) p1_stats$N, 2 * phase2_n_per_group),
+  `95% CI half-width` = c(if (!is.null(p1_stats)) sprintf("±%.2f points", (p1_stats$ci_high - p1_stats$ci_low) / 2),
+                          sprintf("±%.2f points (expected)", half_width(phase2_n_per_group)))
+)
+knitr::kable(rows, caption = sprintf("Precision of the key estimate, Phase 2 expected values based on %s.", basis$source))
+
+tibble(
+  `Effect to detect` = c(sprintf("Original: %.2f points", abs(orig_stats$estimate)),
+                         if (!is.null(p1_stats)) sprintf("Phase 1: %.2f points", abs(p1_stats$estimate)),
+                         sprintf("Half the original: %.2f points", abs(orig_stats$estimate) / 2)),
+  `Power at planned N` = scales::percent(c(
+    power_at(phase2_n_per_group, abs(orig_stats$estimate), pooled_sd(original)),
+    if (!is.null(p1_stats)) power_at(phase2_n_per_group, abs(p1_stats$estimate), pooled_sd(p1_summary)),
+    power_at(phase2_n_per_group, abs(orig_stats$estimate) / 2, pooled_sd(original))
+  ), accuracy = 1)
+) |>
+  knitr::kable(caption = sprintf("Power of the Phase 2 key test at %d per condition, two-sided alpha = .05.", phase2_n_per_group))
+```
+
+## Analysis plan
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- The confirmatory analysis for Phase 2, written before Phase 2 data collection. On the -->
+<!-- best-practices tracks this is normally the same key test as Phase 1, run on the Phase 2 data -->
+<!-- alone; say whether you will also report a pooled estimate across phases, and label it -->
+<!-- exploratory if so. On the scientific track, specify the test for the new comparison. Name the -->
+<!-- exclusion rule (unchanged unless it is in the Changes table) and list any exploratory measures. -->
+
+<!-- Run Phase 2 under a new `EXPERIMENT.id` in `experiment.js` (for example `smith2016-phase2`) and -->
+<!-- set `experiment_id_phase2` at the top of this file to match, so the two phases' data never mix. -->
+<!-- ::: -->
+
+The primary outcome will be average of the six Feeling Heard items, which is the same as Phase 1 and the original paper. Similar to Phase 1, I will conduct the same two-sided Welch's t-test to compare the AI-label and human-label conditions at ($\alpha$ = .05). I expect participants in the AI-label condition to report feeling less heard. Similarly, I will report the mean difference (AI label minus human label), its 95% confidence interval, and Cohen's d. The inclusion criteria would be exactly the same as Phase 1. Participants must provide valid consent, write an initial description of at least 30 words, complete the study, and answer all six Feeling Heard items. 
+
+In exploratory analyses, I will further compare the label conditions on perceived response accuracy, perceived responder understanding, and connection to the responder. I will also compare suspicion ratings in the human-label condition with those from Phase 1 to see whether fewer participants suspected AI authorship after the revised conversation. I will compare the Phase 1 and Phase 2 effect estimates and confidence intervals side by side and report each phase separately. In addition, I will use linear regression to examine whether doubting the assigned label is associated with Feeling Heard in each condition. 
+
+## Results
+
+```{r}
+#| label: phase2-notice
+#| echo: false
+#| results: asis
+if (!have_phase2) {
+  cat(
+    "::: {.callout-warning icon=false}\n",
+    "## No Phase 2 data yet\n\n",
+    "There are no exported data for `", experiment_id_phase2, "` yet, so the Phase 2 results are ",
+    "skipped. Export with `node qualtrics/export-data.js --id ", experiment_id_phase2,
+    "` once Phase 2 has run.\n",
+    ":::\n", sep = "")
+}
+```
+
+```{r}
+#| label: phase2-results
+#| eval: !expr have_phase2
+p2_summary <- label_summary(phase2)
+p2_stats   <- diff_ci(p2_summary)
+cat(sprintf("Phase 2: %d started, %d completed, %d analysed.\n",
+            nrow(phase2$participants), nrow(phase2$complete), nrow(phase2$keep)))
+if (!is.null(p2_stats)) {
+  p_text <- if (p2_stats$p < 0.001) "p < .001" else sprintf("p = %.3f", p2_stats$p)
+  cat(sprintf("Key comparison: %.2f points [%.2f, %.2f], t(%.1f) = %.2f, %s.\n",
+              p2_stats$estimate, p2_stats$ci_low, p2_stats$ci_high,
+              p2_stats$df, p2_stats$statistic, p_text))
+}
+```
+
+```{r}
+#| label: fig-phase2
+#| eval: !expr have_phase2
+#| fig-cap: "Feeling Heard (1-7) by label condition: original study, Phase 1 replication, and Phase 2 extension. Error bars are 95% confidence intervals."
+#| fig-width: 8
+#| fig-height: 4
+comparison_plot(Original = original,
+                `Phase 1: replication` = if (have_data) label_summary(phase1),
+                `Phase 2: extension` = label_summary(phase2))
+```
+
+```{r}
+#| label: phase2-data-prep
+#| eval: !expr have_phase2
+# Records removed by each exclusion rule (same rules and same order as Phase 1, applied in read_phase()).
+st2 <- phase2$status
+rules <- c("Did not finish the survey", "No valid consent", "Description under 30 words",
+           "Missing one of the six feeling-heard items")
+tibble(
+  Step = c(rules, "Analysed: AI label", "Analysed: human label"),
+  n = c(map_chr(rules, ~ as.character(sum(st2$reason == .x))),
+        as.character(sum(st2$reason == "Analysed" & st2$condition == "ai", na.rm = TRUE)),
+        as.character(sum(st2$reason == "Analysed" & st2$condition == "human", na.rm = TRUE)))) |>
+  knitr::kable(caption = "Phase 2 data preparation: records removed by each exclusion rule, and the analysed N by label.")
+```
+
+```{r}
+#| label: phase2-vs-phase1
+#| eval: !expr have_phase2 && have_data
+# Exploratory: is the label effect different in Phase 2 than in Phase 1? Difference between the two phases' effects
+# (Phase 2 minus Phase 1) with a normal-approximation 95% CI from the two Welch standard errors.
+e1 <- diff_ci(label_summary(phase1)); e2 <- diff_ci(label_summary(phase2))
+if (!is.null(e1) && !is.null(e2)) {
+  se <- function(r) (r$ci_high - r$ci_low) / (2 * qt(.975, r$df))
+  dd <- e2$estimate - e1$estimate; dd_se <- sqrt(se(e1)^2 + se(e2)^2)
+  tibble(`Phase 1 effect` = sprintf("%.2f", e1$estimate), `Phase 2 effect` = sprintf("%.2f", e2$estimate),
+         `Phase 2 minus Phase 1 [95% CI]` = sprintf("%.2f [%.2f, %.2f]", dd, dd - 1.96 * dd_se, dd + 1.96 * dd_se),
+         p = format.pval(2 * pnorm(-abs(dd / dd_se)), digits = 2, eps = 0.001)) |>
+    knitr::kable(caption = "Exploratory: label effect on Feeling Heard (AI label minus human label) in Phase 2 compared with Phase 1.")
+}
+```
+
+```{r}
+#| label: phase2-outcomes
+#| eval: !expr have_phase2 && have_data
+# Exploratory: the label effect on the other three outcomes in Phase 2 (same code as Phase 1's table).
+p2_sum <- measure_summaries(phase2)  # needs Phase 1's outcome_rows() and rep_sum above
+bind_rows(outcome_rows(rep_sum, "Phase 1: replication"), outcome_rows(p2_sum, "Phase 2: extension")) |>
+  arrange(factor(Outcome, levels = measure_labels[secondary]), Study) |>
+  knitr::kable(caption = "Exploratory: label effect on the other three outcomes (1-7), Phase 2 next to Phase 1, Welch t tests.")
+```
+
+```{r}
+#| label: fig-phase2-effects
+#| eval: !expr have_phase2 && have_data
+#| fig-cap: "Exploratory: label effect (AI label minus human label) on the four outcomes in the original study, Phase 1 and Phase 2, with 95% confidence intervals."
+#| fig-width: 8
+#| fig-height: 4
+effects_plot(Original = measure_effects(original_measures),
+             `Phase 1: replication` = measure_effects(rep_sum),
+             `Phase 2: extension` = measure_effects(p2_sum))
+```
+
+```{r}
+#| label: phase2-suspicion
+#| eval: !expr have_phase2
+# Exploratory: suspicion about the source of the reply (1-7) by label in Phase 2, and the Phase 2 vs Phase 1 comparison
+# within each label (Welch t test, Phase 2 minus Phase 1).
+susp <- function(d, phase) {
+  if (!"suspicion" %in% names(d$keep)) d$keep$suspicion <- NA
+  d$keep |> transmute(Phase = phase, condition, suspicion = as.numeric(suspicion))
+}
+s_all <- bind_rows(if (have_data) susp(phase1, "Phase 1"), susp(phase2, "Phase 2"))
+s_all |>
+  group_by(Phase, condition) |>
+  summarise(n = sum(!is.na(suspicion)), Mean = round(mean(suspicion, na.rm = TRUE), 2),
+            SD = round(sd(suspicion, na.rm = TRUE), 2),
+            `% rating 5 to 7` = round(100 * mean(suspicion >= 5, na.rm = TRUE), 0), .groups = "drop") |>
+  knitr::kable(caption = "Exploratory: suspicion about the source of the reply, by phase and label (analysed participants).")
+
+if (have_data) {
+  map_dfr(c("human", "ai"), function(cond) {
+    a <- s_all$suspicion[s_all$Phase == "Phase 2" & s_all$condition == cond]
+    b <- s_all$suspicion[s_all$Phase == "Phase 1" & s_all$condition == cond]
+    if (sum(!is.na(a)) < 2 || sum(!is.na(b)) < 2) return(NULL)
+    tt <- t.test(a, b)
+    tibble(Label = c(human = "Human label", ai = "AI label")[[cond]],
+           `Phase 2 minus Phase 1 [95% CI]` = sprintf("%.2f [%.2f, %.2f]", tt$estimate[[1]] - tt$estimate[[2]], tt$conf.int[1], tt$conf.int[2]),
+           `t(df)` = sprintf("%.2f (%.1f)", tt$statistic, tt$parameter),
+           p = format.pval(tt$p.value, digits = 2, eps = 0.001))
+  }) |>
+    knitr::kable(caption = "Exploratory: change in suspicion from Phase 1 to Phase 2 within each label, Welch t tests.")
+}
+```
+
+```{r}
+#| label: phase2-doubt
+#| eval: !expr have_phase2
+# Exploratory: is doubting the assigned label (suspicion, 1-7) associated with Feeling Heard? A simple linear regression
+# within each label condition in Phase 2 (slope = change in Feeling Heard per suspicion point).
+k2 <- phase2$keep
+if (!"suspicion" %in% names(k2)) k2$suspicion <- NA
+map_dfr(c("ai", "human"), function(cond) {
+  d <- k2 |> filter(condition == cond, !is.na(suspicion), !is.na(feeling_heard)) |> mutate(suspicion = as.numeric(suspicion))
+  if (nrow(d) < 3 || sd(d$suspicion) == 0) return(NULL)
+  m <- lm(feeling_heard ~ suspicion, data = d); ci <- confint(m)["suspicion", ]
+  tibble(Label = c(ai = "AI label", human = "Human label")[[cond]], n = nrow(d),
+         `Slope [95% CI]` = sprintf("%.2f [%.2f, %.2f]", coef(m)[["suspicion"]], ci[[1]], ci[[2]]),
+         p = format.pval(summary(m)$coefficients["suspicion", 4], digits = 2, eps = 0.001))
+}) |>
+  knitr::kable(caption = "Exploratory: Feeling Heard regressed on suspicion within each label, Phase 2.")
+```
+
+```{r}
+#| label: phase2-data-quality
+#| eval: !expr have_phase2
+# Data-quality checks for Phase 2 completers: technical problems the participant reported (2 = yes, as in Phase 1),
+# and how long the first reply took to appear. Later replies use the same wait but it is not recorded per reply.
+p2d <- phase2$participants
+for (col in c("tech_issues", "wait_ms")) if (!col %in% names(p2d)) p2d[[col]] <- NA
+p2d |>
+  filter(completed) |>
+  summarise(`Finished` = n(),
+            `Reported a technical issue (chat)` = sum(as.numeric(tech_issues) == 2, na.rm = TRUE),
+            `Median wait before the first reply (s)` = round(median(as.numeric(wait_ms), na.rm = TRUE) / 1000, 1)) |>
+  knitr::kable(caption = "Phase 2 data-quality checks (completers).")
+```
+
+## Discussion
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+<!--  -->
+<!-- Compare Phase 2 with Phase 1 and with the original, using the Key statistics table and the figure -->
+<!-- above. Did the precision improve as you expected? For a rescue, did addressing the plausible -->
+<!-- reasons recover the effect? For a scientific extension, what does the new condition show? End -->
+<!-- with what the two phases together say about the original finding. -->
+<!-- ::: -->
+
+# Data and code availability
+
+<!-- ::: {.callout-tip icon=false} -->
+<!-- ## Guidance -->
+
+<!-- Edit the statement below to match what you are actually sharing. Anonymized data and all code -->
+<!-- should be public; if something cannot be shared, say what and why. -->
+<!-- ::: -->
+
+The experiment code, the anonymized data, and the code that produces every number in this
+report are available at <https://github.com/psych251/yin2024>. The experiment itself can be
+taken at <https://stanforduniversity.qualtrics.com/jfe5/preview/previewId/2e58799d-82a5-48c9-99ec-d3e064b40ecd/SV_d0Cu80obbYNC9Vk?Q_CHL=preview&Q_SurveyVersionID=current>. The data contain no names, email addresses,
+IP addresses, or Prolific IDs; the file linking participants to their Prolific IDs is kept
+privately for payment and is not shared.

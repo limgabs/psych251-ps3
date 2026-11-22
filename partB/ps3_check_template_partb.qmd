@@ -1,0 +1,229 @@
+---
+title: "Reproducibility check: AI can help people feel heard, but an AI label diminishes this impact [Yin et al. (2024)]"
+author: "Gabrielle Halim"
+date: Saturday, November 21, 2026
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Article
+
+- Citation and DOI: Yin, Y., Jia, N., & Wakslak, C. J. (2024). AI can help people feel heard, but an AI label diminishes this impact. Proceedings of the National Academy of Sciences of the United States of America, 121(14), e2319112121. (https://doi.org/10.1073/pnas.2319112121)
+- Data/materials repository URL: (https://osf.io/8wnmr/overview?view_only=30f6db3f57954e9eaa016457a29264b6)
+- Part A (known case) or Part B (a classmate's project paper): Part B
+- Part B only: the classmate's project repo, and which target outcome is its key effect: (https://github.com/psych251/yin2024); The key effect is the "difference in mean Feeling Heard (AI label minus human label) with a 95% CI from Welch's t test, plus Cohen's d (pooled SD)."
+
+## Target outcomes
+
+Written **before** opening the data. Quote each from the paper. In Part B, one of these must
+be the project's key effect.
+
+| # | Target outcome (quoted) | Paper value(s) |
+|---|---|---|
+| 1 | **Key effect.** Label effect within AI-generated responses on Feeling heard: "AI response human label - AI response AI label" (SI Appendix, Table S2, p. 6). *Secondary check (added after the data were opened, at the checker's direction): the classmate's key statistic, the same comparison as a Welch's t test with the raw mean difference, its 95% CI and Cohen's d (pooled SD of the two cells).* | df = 451, t = 4, p < .001, d = 0.52, 95% CI [0.31, 0.74]. *Secondary check: not reported in the paper. The classmate computed it themselves, from Table 2's rounded means and SDs (5.41 [1.33] vs. 6.12 [0.97]) and the OSF cell sizes (n = 124 vs. 110), using the `diff_ci()` function in their report's "Original" row. Their output, AI label minus human label: N = 234, difference = −0.71, 95% CI [−1.01, −0.41], t(224) = −4.70, p < .001, d = −0.60 (approximate 95% CI [−0.87, −0.34]).* |
+| 2 | "Means and SDs for the main dependent variables in the four experimental conditions" (Table 2, p. 5), Feeling heard row | AI resp/human label 6.12 (0.97); AI resp/AI label 5.41 (1.33); human resp/human label 5.51 (1.51); human resp/AI label 4.82 (1.55) |
+| 3 | "Table 1 shows the means and SDs for the response and label manipulations" (p. 2; Table 1, p. 3), Feeling heard column: main effects from the 2 × 2 ANOVA | AI response 5.74 (1.22), human response 5.17 (1.56): Δ = 0.57, F(1,451) = 22.00, P < 0.001, η² = 0.046. AI label 5.13 (1.46), human label 5.81 (1.30): Δ = −0.68, F(1,451) = 30.31, P < 0.001, η² = 0.063 |
+| 4 | "there were no interactions between the response and label effects" (p. 2); Feeling heard interaction (SI Appendix, Table S1, p. 5) | F(1,453) = 0.006, p = .94, η² < .001 |
+
+Sample size for all targets: "This left us with 455 responses for data analysis" (p. 8).
+
+Notes written before opening the data:
+
+- The classmate's key statistic is a Welch's t test with the raw mean difference, its 95% CI and Cohen's d (pooled SD). The paper does not report a Welch test for this comparison. It reports a t with df = 451 (the 2 × 2 model's error df, so presumably a contrast that uses the pooled error term) and a d with a 95% CI. Target 1 is checked against the paper's reported values. The Welch version is computed as a secondary check.
+- The paper's df differ between main effects (451) and interaction (453). The df are recorded as printed.
+- Disclosure: when the agent searched the classmate's report for the OSF link, its search output included a comment saying some published descriptives differ from the OSF data in the last digit. That comment was not used to choose targets or values.
+
+## Materials inventory
+
+The OSF project (<https://osf.io/8wnmr>, view-only link from the paper) has six files. All were downloaded on 2026-11-21 into `data/`.
+
+| Item | Available? | Notes |
+|---|---|---|
+| Raw data | Partly | `Being Heard by AI OSF.csv` (455 rows × 117 columns) has the item-level responses (e.g., the six feeling-heard items `understood`, `validated`, `affirmed`, `seen`, `accepted`, `caredfor`) next to the composites. It is already the analysis sample: the exclusions described on pp. 7–8 (540 → 455) are applied, and Part 1/Part 2 records and audio transcripts are not posted (the paper says only "some study data" are available, p. 9). `Followup Study.csv` holds the third-party ratings (not needed for these targets). |
+| Processed data | Yes | Same file: composites `feelheard`, `accuracy`, `understoodme`, `connection` and condition columns `responseR` (`ai response` / `human response`) and `labelR` (`ai label` / `human label`). |
+| Codebook / variable descriptions | No | No codebook. The variable names are readable, and the item wording is in the paper (p. 8) and `Study Material.docx` (full Part 1–3 survey text). |
+| Analysis code | Yes | `Being Heard by AI OSF.R`. It uses `lsr::etaSquared(..., type = 2)` for the ANOVAs and `rempsyc::nice_contrasts()` for SI Table S2. It does not load its packages before the first call, does not load `dplyr` before using `%>%`, and reads a follow-up file under a different name (`Followup Study OSF.csv`) from the one posted. It was read but not run, because `lsr` and `rempsyc` are not installed here. The reproduction below is written independently in base R / tidyverse / `car` / `boot`. |
+| Preregistration | Yes | AsPredicted #136592 (main study) and #138714 (addendum on the Part 2 attrition fix). |
+
+## Reproduction
+
+The agent's work, under your direction. Keep all code visible.
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(car)   # Type II ANOVA, matching lsr::etaSquared(type = 2) in the authors' script
+library(boot)  # bootstrap CI for Cohen's d (target 1)
+```
+
+```{r}
+#| label: load
+d <- read_csv("data/Being Heard by AI OSF.csv", show_col_types = FALSE)
+dim(d)
+count(d, responseR, labelR)
+```
+
+```{r}
+#| label: preprocess
+# No exclusions are needed: the posted file is already the N = 455 analysis sample.
+# Check that the posted feelheard composite is the mean of the six items (paper p. 8).
+d <- d |>
+  mutate(fh_recalc = rowMeans(across(c(understood, validated, affirmed, seen, accepted, caredfor))),
+         cond = factor(paste(responseR, labelR, sep = ", "),
+                       levels = c("ai response, human label", "ai response, ai label",
+                                  "human response, human label", "human response, ai label")))
+max(abs(d$feelheard - d$fh_recalc))
+sum(is.na(d$feelheard))
+```
+
+### Target 2: four-cell means and SDs (Table 2)
+
+```{r}
+#| label: target2
+cells <- d |>
+  group_by(cond) |>
+  summarise(n = n(), mean = mean(feelheard), sd = sd(feelheard), .groups = "drop")
+cells |> mutate(across(c(mean, sd), \(x) round(x, 2)))
+```
+
+### Target 3: main effects of response and label (Table 1)
+
+```{r}
+#| label: target3-descriptives
+bind_rows(
+  d |> group_by(level = responseR) |> summarise(n = n(), mean = mean(feelheard), sd = sd(feelheard)),
+  d |> group_by(level = labelR)    |> summarise(n = n(), mean = mean(feelheard), sd = sd(feelheard))
+) |> mutate(across(c(mean, sd), \(x) round(x, 2)))
+
+# Deltas (AI minus human), as in Table 1
+with(d, c(response = mean(feelheard[responseR == "ai response"]) - mean(feelheard[responseR == "human response"]),
+          label    = mean(feelheard[labelR == "ai label"])       - mean(feelheard[labelR == "human label"])))
+```
+
+```{r}
+#| label: target3-anova
+fit <- aov(feelheard ~ responseR * labelR, data = d)
+a2  <- Anova(fit, type = 2)
+ss_total <- sum((d$feelheard - mean(d$feelheard))^2)
+ss_res   <- a2["Residuals", "Sum Sq"]
+
+anova_tab <- tibble(
+  term       = rownames(a2)[1:3],
+  df1        = a2$Df[1:3],
+  df2        = a2["Residuals", "Df"],
+  F          = a2$`F value`[1:3],
+  p          = a2$`Pr(>F)`[1:3],
+  eta2       = a2$`Sum Sq`[1:3] / ss_total,                 # classical eta squared
+  eta2_part  = a2$`Sum Sq`[1:3] / (a2$`Sum Sq`[1:3] + ss_res) # partial eta squared
+)
+anova_tab |> mutate(across(c(F, eta2, eta2_part), \(x) signif(x, 4)), p = signif(p, 3)) |> as.data.frame()
+```
+
+### Target 4: response × label interaction (SI Table S1)
+
+The interaction row of the same Type II ANOVA:
+
+```{r}
+#| label: target4
+anova_tab |> filter(term == "responseR:labelR") |>
+  mutate(F = round(F, 4), p = round(p, 3), across(c(eta2, eta2_part), \(x) signif(x, 2))) |> as.data.frame()
+```
+
+### Target 1 (key effect): AI response, human label vs. AI response, AI label (SI Table S2)
+
+The authors' script calls `rempsyc::nice_contrasts()` on the four-condition factor. That function gets t from a
+one-way model of all four cells, so it uses the pooled error term with df = 455 − 4 = 451. Cohen's d is computed by
+`bootES` with the pooled SD of all four cells, and its CI is a bootstrap (by default 2,000 resamples, BCa). The
+code below does the same steps by hand, so the CI can differ slightly from the paper's because of
+bootstrap randomness.
+
+```{r}
+#| label: target1-contrast
+m   <- lm(feelheard ~ cond, data = d)
+mse <- sigma(m)^2
+dfe <- df.residual(m)
+
+g_hum <- d$feelheard[d$cond == "ai response, human label"]
+g_ai  <- d$feelheard[d$cond == "ai response, ai label"]
+diff  <- mean(g_hum) - mean(g_ai)
+se    <- sqrt(mse * (1 / length(g_hum) + 1 / length(g_ai)))
+t_c   <- diff / se
+p_c   <- 2 * pt(-abs(t_c), dfe)
+d_c   <- diff / sqrt(mse)   # d with the pooled SD of all four cells
+
+c(diff = diff, t = t_c, df = dfe, p = p_c, d = d_c)
+```
+
+```{r}
+#| label: target1-bootstrap
+d_stat <- function(data, idx) {
+  b   <- data[idx, ]
+  sdp <- sigma(lm(feelheard ~ cond, data = b))
+  (mean(b$feelheard[b$cond == "ai response, human label"]) -
+     mean(b$feelheard[b$cond == "ai response, ai label"])) / sdp
+}
+set.seed(251)
+bt <- boot(d, d_stat, R = 2000, strata = d$cond)
+boot.ci(bt, type = c("bca", "perc"))
+```
+
+**Target 1, secondary check:** the classmate's key statistic (not reported in the paper). Welch's t test on the same two
+cells, with Cohen's d from the pooled SD of those two cells only.
+
+```{r}
+#| label: target1-welch
+welch <- t.test(g_hum, g_ai)   # Welch by default
+sd_2  <- sqrt(((length(g_hum) - 1) * var(g_hum) + (length(g_ai) - 1) * var(g_ai)) /
+                (length(g_hum) + length(g_ai) - 2))
+c(diff = diff, ci_low = welch$conf.int[1], ci_high = welch$conf.int[2],
+  t = unname(welch$statistic), df = unname(welch$parameter), p = welch$p.value,
+  d_two_cell_pooled = diff / sd_2)
+```
+
+### Agent's summary
+
+The agent's own claim, separate from the checker's verdict below. Values are from the code above.
+
+- **Target 1 (key effect):** t(451) = 4.00, p = 7.4 × 10⁻⁵, d = 0.524, matching the paper's t = 4, p < .001, d = 0.52. Bootstrap 95% CI for d (seed 251, 2,000 stratified resamples): BCa [0.30, 0.75], percentile [0.31, 0.75], against the paper's [0.31, 0.74]. The paper's CI also comes from a random bootstrap, and its seed is not in the script, so a difference of about 0.01 at either end is expected. 
+  - *Secondary check (Welch):* difference = 0.71, 95% CI [0.41, 1.01], t(223.9) = 4.72, p = 4.2 × 10⁻⁶, d = 0.61. The difference agrees with Table 2's means (6.12 − 5.41). Against the classmate's computed values (signs flipped, since they subtract human from AI): difference 0.71 = 0.71, CI [0.41, 1.01] = [0.41, 1.01], t 4.72 vs. 4.70, df 223.9 vs. 224, d 0.61 vs. 0.60. The small gaps in t and d come from the classmate working from rounded summary statistics, not the raw data. d is larger than the paper's 0.52 because it divides by the two cells' pooled SD, not by all four cells' SD.
+- **Target 2:** all four cell means and SDs match Table 2 to two decimals.
+- **Target 3:** means, SDs, deltas and F values (22.00, 30.31; df 1, 451) match. The η² values match the paper only when computed as **partial** η²: label .0630 matches .063, and response is .0465, which rounds to .047, not the paper's .046 (it would be .046 only if truncated). Classical η² gives .044 and .060. Table 1 labels these as η², not partial η².
+- **Target 4:** F = 0.006, p = .94, η² < .001 match. The model's df are (1, 451), not the (1, 453) printed in SI Table S1, which looks like a typo.
+
+## Checker's verdict
+
+Filled in by you, not the agent.
+
+| # | Paper value | Reproduced value | Verdict (exact / minor / major / not reproducible) | Reason for discrepancy |
+|---|---|---|---|---|
+| 1 | t = 4, p < .001, d = 0.52, BCa [0.31, 0.74] *Secondary check (Welch; classmate's calculation):* N = 234, difference = −0.71, 95% CI [−1.01, −0.41], t(224) = −4.70, p < .001, d = −0.60 (approximate 95% CI [−0.87, −0.34]) | t(451) = 4.00, p = 7.4 × 10⁻⁵, d = 0.524, BCa [0.30, 0.75] *Secondary check (Welch):* N = 234, difference = 0.71, 95% CI [0.41, 1.01], t(223.9) = 4.72, p = 4.2 × 10⁻⁶, d = 0.61. | Extremely minor discrepancy in BCa (0.01 difference).*Secondary check (Welch):* Minor discrepancy| The BCa seed was not reported. *Secondary check (Welch):* In terms of the direction of values, classmate calculated the difference between human from AI while my report calculated the difference between AI from human. Minor rounding differences can be attributed to classmate's use of rounded summary statistics instead of the raw data. |
+| 2 | AI resp/human label 6.12 (0.97); AI resp/AI label 5.41 (1.33); human resp/human label 5.51 (1.51); human resp/AI label 4.82 (1.55) | AI resp/human label 6.12 (0.97); AI resp/AI label 5.41 (1.33); human resp/human label 5.51 (1.51); human resp/AI label 4.82 (1.55) | Exact | N/A |
+| 3 | AI response 5.74 (1.22), human response 5.17 (1.56): Δ = 0.57, F(1,451) = 22.00, P < 0.001, η² = 0.046. AI label 5.13 (1.46), human label 5.81 (1.30): Δ = −0.68, F(1,451) = 30.31, P < 0.001, η² = 0.063 | AI response 5.74 (1.22), human response 5.17 (1.56): Δ = 0.57, F(1,451) = 22.00, P < 0.001, η² = 0.044. AI label 5.13 (1.46), human label 5.81 (1.30): Δ = −0.68, F(1,451) = 30.31, P < 0.001, η² = 0.060 | Minor discrepancy in η². | The authors may have reported partial η² instead of η² because partial η² values matched the original results more closely (.0465 and .0630 for response and label).  |
+| 4 | F(1,453) = 0.006, p = .94, η² < .001 | F(1,451) = 0.006, p = .94, η² < .001 | Minor discrepancy in df. | The authors may have pasted the last digit of the df incorrectly because the other statistics matched the original results.  |
+
+Agent's own claim about success, and whether it was right: The agent was accurate about the successes and discrepancies. 
+
+## Time
+
+- Your time (hours): 3
+- Agent wall-clock time (hours): 1.2
+- Stopped at the 4-hour cap? What remained: N/A
+
+## Assessment
+
+Is the primary result analytically reproducible? What would have made this take 30 minutes?
+
+The primary result was analytically reproducible, as shown from the exact reproduction of the t-statistic, significance, Cohen's d, and extremely minor discrepancy in BCa. My classmate's key effect was not directly reported in the original paper, so it took some time to fully understand where the values came from and decide the paper's target outcomes. 
+
+## AI documentation
+
+- Agent and interface (e.g., Claude Code, Codex CLI, Cursor): Claude Code
+- Model and version, if the tool reports it: Opus 5.5
+- Context you gave it (files, instructions, any context file): Files: yin-et-al-2024-ai-can-help-people-feel-heard-but-an-ai-label-diminishes-this-impact.pdf, yin-et-al-2024-supplementary.pdf, yutong_replication-report.qmd, (https://osf.io/8wnmr/overview?view_only=30f6db3f57954e9eaa016457a29264b6), ps3_check_template_partb.qmd, and partA/ps3_reproducibility.qmd. See my instructions in the transcript. 
+- Number of times you intervened, and the most important intervention: I intervened three times (1- confirmed the 4 target outcomes, 2- asked Claude to report secondary outcomes in target outcome, 3- asked Claude to report classmate's calculated key statistics in the report). The most important intervention was incorporating my classmate's key statistics into the report. 
+- Transcript: [transcripts/partB_transcript.jsonl](https://github.com/limgabs/psych251-ps3/blob/main/transcripts/partB_transcript.jsonl)
