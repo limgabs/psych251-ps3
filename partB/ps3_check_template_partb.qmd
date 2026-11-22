@@ -5,6 +5,7 @@ date: Saturday, November 21, 2026
 format:
   html:
     toc: true
+    link-external-newwindow: true
 execute:
   echo: true
   warning: false
